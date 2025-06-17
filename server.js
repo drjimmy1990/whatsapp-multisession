@@ -27,18 +27,24 @@ if (!JWT_SECRET || !ADMIN_PASSWORD || !SESSION_SECRET) {
     process.exit(1);
 }
 
-// --- Session Middleware Setup ---
+// --- MODIFIED: Session Middleware Setup ---
 app.use(session({
-    secret: SESSION_SECRET, // A long, random string for session signing
+    // Use the new persistent store
+    store: new SQLiteStore({
+        db: 'sessions.db', // The file where sessions will be stored
+        dir: './',         // The directory to store the file in (project root)
+        table: 'admin_sessions'
+    }),
+    secret: SESSION_SECRET,
     resave: false,
-    saveUninitialized: false, // Don't save sessions until something is stored
+    saveUninitialized: false,
     cookie: { 
-        httpOnly: true, // Prevents client-side JS from accessing the cookie
-        secure: process.env.NODE_ENV === 'production', // Use secure cookies in production (requires HTTPS)
-        maxAge: 1000 * 60 * 60 * 8 // Cookie valid for 8 hours
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 1000 * 60 * 60 * 8 // 8 hours
     }
 }));
-
+// --- END OF MODIFICATION ---
 
 // --- View Engine Setup ---
 app.set('views', path.join(__dirname, 'views'));
