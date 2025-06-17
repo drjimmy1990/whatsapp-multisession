@@ -12,11 +12,13 @@ const SQLiteStore = require('connect-sqlite3')(session);
 const SessionManager = require('./src/managers/SessionManager');
 const db = require('./src/db/database');
 const { createTenantWithPassword } = require('./src/utils/user');
-app.set('trust proxy', 1); 
+
 
 const app = express();
 app.use(express.json());
 const PORT = process.env.PORT || 5001;
+app.set('trust proxy', 1); 
+
 
 // --- Environment Variable Checks ---
 const JWT_SECRET = process.env.JWT_SECRET;
