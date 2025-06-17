@@ -12,6 +12,7 @@ const SQLiteStore = require('connect-sqlite3')(session);
 const SessionManager = require('./src/managers/SessionManager');
 const db = require('./src/db/database');
 const { createTenantWithPassword } = require('./src/utils/user');
+app.set('trust proxy', 1); 
 
 const app = express();
 app.use(express.json());
@@ -41,6 +42,7 @@ app.use(session({
     saveUninitialized: false,
     cookie: { 
         httpOnly: true,
+        secure: true, 
         secure: process.env.NODE_ENV === 'production',
         maxAge: 1000 * 60 * 60 * 8 // 8 hours
     }
