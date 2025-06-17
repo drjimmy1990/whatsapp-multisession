@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service Admin Panel</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f4f9; color: #333; margin: 0; padding: 2rem; }
+        .container { max-width: 1200px; margin: auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1, h2, h3 { color: #5a5a5a; }
+        .header { display: flex; justify-content: space-between; align-items: center; }
+        .header-info { display: flex; align-items: center; gap: 20px; }
+        .last-updated { font-size: 0.8em; color: #888; }
+        h2 { border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 2rem; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #ddd; vertical-align: middle;}
+        th { background-color: #f9f9f9; }
+        code { background-color: #eee; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; word-break: break-all; }
+        .status { font-weight: bold; text-transform: uppercase; }
+        .status-connected { color: #28a745; }
+        .status-disconnected, .status-error { color: #dc3545; }
+        .status-pending_scan { color: #ffc107; }
+        .status-initializing { color: #17a2b8; }
+        .actions button { padding: 6px 12px; border: none; border-radius: 4px; color: white; cursor: pointer; margin-right: 5px; font-size: 0.9em;}
+        .btn-primary { background-color: #007bff; }
+        .btn-secondary { background-color: #6c757d; }
+        .btn-success { background-color: #28a745; }
+        .btn-danger { background-color: #dc3545; }
+        .btn-warning { background-color: #ffc107; color: #212529; }
+        .btn-info { background-color: #17a2b8; }
+        .form-section { margin-top: 1.5rem; padding: 1.5rem; background-color: #f9f9f9; border-radius: 8px; border: 1px solid #eee; }
+        .form-section form { display: flex; flex-wrap: wrap; gap: 10px; }
+        .form-section input { width: 220px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        .form-section button { align-self: flex-end; }
+        
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); }
+        .modal-content { background-color: #fefefe; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 500px; border-radius: 8px; }
+        .close-button { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .modal-content .form-group { margin-bottom: 1rem; }
+        .modal-content label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .modal-content input { width: 100%; padding: 8px; box-sizing: border-box; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- START OF CHANGE -->
+        <div class="header">
+            <h1>WhatsApp Service - Admin Panel</h1>
+            <div class="header-info">
+                <div class="last-updated" id="last-updated"></div>
+                <button class="btn-warning" onclick="logout()">Logout</button>
+            </div>
+        </div>
+        <!-- END OF CHANGE -->
+        
+        <div class="section">
+            <h2>Tenants Management</h2>
+            <div class="form-section">
+                <h3>Add New Tenant</h3>
+                <form id="add-tenant-form" onsubmit="addTenant(event)">
+                    <input type="text" id="tenantId" name="tenantId" placeholder="Tenant ID (e.g., bobs-pizza)" required>
+                    <input type="text" id="name" name="name" placeholder="Tenant Name (e.g., Bob's Pizza)" required>
+                    <input type="text" id="username" name="username" placeholder="Login Username" required>
+                    <input type="password" id="password" name="password" placeholder="Login Password" required>
+                    <input type="number" id="maxSessions" name="maxSessions" placeholder="Max Sessions" value="1" min="1" required style="width: 120px;">
+                    <input type="url" id="webhookUrl" name="webhookUrl" placeholder="Webhook URL (Optional)" style="flex-grow: 1;">
+                    <button type="submit" class="btn-success">Add Tenant</button>
+                </form>
+            </div>
+
+            <h2 style="margin-top: 2rem;">Existing Tenants</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tenant ID</th>
+                        <th>Name</th>
+                        <th>Username</th>
+                        <th>Max Sessions</th>
+                        <th>Webhook URL</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="tenants-table-body"></tbody>
+            </table>
+            <p id="no-tenants-message" style="display: none;">No tenants found.</p>
+        </div>
+
+        <div class="section">
+            <h2>Sessions</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Session ID</th>
+                        <th>Tenant ID</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="sessions-table-body"></tbody>
+            </table>
+            <p id="no-sessions-message" style="display: none;">No sessions found.</p>
+        </div>
+    </div>
+
+    <!-- Edit Tenant Modal -->
+    <div id="edit-tenant-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal()">×</span>
+            <h3>Edit Tenant</h3>
+            <form id="edit-tenant-form" onsubmit="handleEditTenant(event)">
+                <input type="hidden" id="edit-tenant-id" name="tenantId">
+                <div class="form-group">
+                    <label for="edit-name">Name</label>
+                    <input type="text" id="edit-name" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-maxSessions">Max Sessions</label>
+                    <input type="number" id="edit-maxSessions" name="maxSessions" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-webhookUrl">Webhook URL</label>
+                    <input type="url" id="edit-webhookUrl" name="webhookUrl">
+                </div>
+                <button type="submit" class="btn-success">Save Changes</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const tenantsTableBody = document.getElementById('tenants-table-body');
+        const sessionsTableBody = document.getElementById('sessions-table-body');
+        const noTenantsMessage = document.getElementById('no-tenants-message');
+        const noSessionsMessage = document.getElementById('no-sessions-message');
+        const lastUpdatedEl = document.getElementById('last-updated');
+        const addTenantForm = document.getElementById('add-tenant-form');
+        const editTenantModal = document.getElementById('edit-tenant-modal');
+        
+        let AppData = { tenants: [], sessions: [] };
+
+        function updateTenantsTable(tenants) {
+            tenantsTableBody.innerHTML = '';
+            noTenantsMessage.style.display = tenants.length === 0 ? 'block' : 'none';
+            tenants.forEach(tenant => {
+                const row = tenantsTableBody.insertRow();
+                row.innerHTML = `
+                    <td><code>${tenant.id}</code></td>
+                    <td>${tenant.name}</td>
+                    <td><code>${tenant.username || 'N/A'}</code></td>
+                    <td>${tenant.maxSessions}</td>
+                    <td><code>${tenant.webhookUrl || 'Not Set'}</code></td>
+                    <td class="actions">
+                        <button class="btn-primary" onclick="startSession('${tenant.id}')">Start Session</button>
+                        <button class="btn-secondary" onclick="openEditModal('${tenant.id}')">Edit</button>
+                        <button class="btn-danger" onclick="deleteTenant('${tenant.id}')">Delete</button>
+                    </td>
+                `;
+            });
+        }
+
+        function updateSessionsTable(sessions) {
+            sessionsTableBody.innerHTML = '';
+            noSessionsMessage.style.display = sessions.length === 0 ? 'block' : 'none';
+            sessions.forEach(session => {
+                const row = sessionsTableBody.insertRow();
+                const sessionName = session.name ? session.name : '<em>Not Set</em>';
+                let actionsHtml = `<button class="btn-danger" onclick="terminateSession('${session.id}')">Terminate</button>`;
+                if (session.status === 'PENDING_SCAN') {
+                    actionsHtml = `<button class="btn-info" onclick="showLink('${session.id}')">Get User Link</button> ` + actionsHtml;
+                }
+                row.innerHTML = `
+                    <td>${sessionName}</td>
+                    <td><code>${session.id}</code></td>
+                    <td><code>${session.tenantId}</code></td>
+                    <td class="status status-${session.status.toLowerCase()}">${session.status}</td>
+                    <td class="actions">${actionsHtml}</td>
+                `;
+            });
+        }
+        
+        async function refreshData() {
+            try {
+                const response = await fetch('/api/dashboard-data');
+                if (response.status === 401 || response.status === 403) {
+                    // If we get an unauthorized error, redirect to login
+                    window.location.href = '/admin/login';
+                    return;
+                }
+                if (!response.ok) throw new Error('Network response was not ok');
+                AppData = await response.json();
+                updateTenantsTable(AppData.tenants);
+                updateSessionsTable(AppData.sessions);
+                lastUpdatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+            } catch (error) {
+                console.error('Failed to refresh data:', error);
+                lastUpdatedEl.textContent = 'Error updating data.';
+            }
+        }
+
+        // --- START OF CHANGE ---
+        async function logout() {
+            try {
+                await fetch('/api/admin/logout', { method: 'POST' });
+                window.location.href = '/admin/login';
+            } catch (error) {
+                alert('Logout failed. Please try again.');
+            }
+        }
+        // --- END OF CHANGE ---
+
+        async function addTenant(event) {
+            event.preventDefault();
+            const formData = new FormData(addTenantForm);
+            const tenantData = Object.fromEntries(formData.entries());
+            try {
+                const response = await fetch('/api/tenants', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(tenantData)
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message);
+                alert('Tenant created successfully!');
+                addTenantForm.reset();
+                refreshData();
+            } catch (error) {
+                alert('Error creating tenant: ' + error.message);
+            }
+        }
+
+        async function startSession(tenantId) {
+            if (!confirm(`Start a new session for tenant "${tenantId}"?`)) return;
+            try {
+                const response = await fetch('/sessions', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tenantId: tenantId })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message);
+                alert(`Session started! ID: ${result.sessionId}.`);
+                refreshData();
+            } catch (error) {
+                alert('Error starting session: ' + error.message);
+            }
+        }
+
+        async function terminateSession(sessionId) {
+            if (!confirm(`Terminate session "${sessionId}"? This cannot be undone.`)) return;
+            try {
+                const response = await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message);
+                alert('Session terminated successfully.');
+                refreshData();
+            } catch (error) {
+                alert('Error terminating session: ' + error.message);
+            }
+        }
+        
+        async function deleteTenant(tenantId) {
+            if (!confirm(`ARE YOU SURE you want to delete tenant "${tenantId}"? This will terminate all their sessions.`)) return;
+            try {
+                const response = await fetch(`/api/tenants/${tenantId}`, { method: 'DELETE' });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message);
+                alert('Tenant deleted successfully.');
+                refreshData();
+            } catch (error) {
+                alert('Error deleting tenant: ' + error.message);
+            }
+        }
+
+        function showLink(sessionId) {
+            const url = `${window.location.origin}/user/session/${sessionId}`;
+            prompt("Send this link to the user to scan the QR code:", url);
+        }
+
+        function openEditModal(tenantId) {
+            const tenant = AppData.tenants.find(t => t.id === tenantId);
+            if (!tenant) return;
+            document.getElementById('edit-tenant-id').value = tenant.id;
+            document.getElementById('edit-name').value = tenant.name;
+            document.getElementById('edit-maxSessions').value = tenant.maxSessions;
+            document.getElementById('edit-webhookUrl').value = tenant.webhookUrl || '';
+            editTenantModal.style.display = 'block';
+        }
+
+        function closeModal() {
+            editTenantModal.style.display = 'none';
+        }
+
+        async function handleEditTenant(event) {
+            event.preventDefault();
+            const tenantId = document.getElementById('edit-tenant-id').value;
+            const name = document.getElementById('edit-name').value;
+            const maxSessions = document.getElementById('edit-maxSessions').value;
+            const webhookUrl = document.getElementById('edit-webhookUrl').value;
+            
+            try {
+                const response = await fetch(`/api/tenants/${tenantId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, webhookUrl, maxSessions })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message);
+                alert('Tenant updated successfully!');
+                closeModal();
+                refreshData();
+            } catch (error) {
+                alert('Error updating tenant: ' + error.message);
+            }
+        }
+
+        window.onclick = function(event) {
+            if (event.target == editTenantModal) {
+                closeModal();
+            }
+        }
+
+        setInterval(refreshData, 5000);
+        document.addEventListener('DOMContentLoaded', refreshData);
+    </script>
+</body>
+</html>

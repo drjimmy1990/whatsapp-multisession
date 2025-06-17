@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Dashboard</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f4f9; color: #333; margin: 0; padding: 2rem; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1, h2 { color: #5a5a5a; }
+        h1 { border-bottom: 2px solid #eee; padding-bottom: 1rem; }
+        .welcome-message { font-size: 1.2rem; }
+        .section { margin-top: 2rem; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #ddd; vertical-align: middle;}
+        th { background-color: #f9f9f9; }
+        code { background-color: #eee; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; word-break: break-all; }
+        .status { font-weight: bold; text-transform: uppercase; }
+        .status-connected { color: #28a745; }
+        .status-disconnected, .status-error { color: #dc3545; }
+        .status-pending_scan { color: #ffc107; }
+        .status-initializing { color: #17a2b8; }
+        .actions button { padding: 6px 12px; border: none; border-radius: 4px; color: white; cursor: pointer; margin-right: 5px; font-size: 0.9em;}
+        .btn-primary { background-color: #007bff; }
+        .btn-danger { background-color: #dc3545; }
+        .btn-info { background-color: #17a2b8; }
+        .btn-secondary { background-color: #6c757d; }
+        .settings-form { margin-top: 1rem; }
+        .settings-form .form-group { margin-bottom: 1rem; }
+        .settings-form label { display: block; font-weight: bold; margin-bottom: 5px; }
+        .settings-form input, .settings-form textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        .settings-form textarea { min-height: 120px; resize: vertical; }
+        .btn-success { background-color: #28a745; }
+        #settings-feedback { margin-top: 10px; font-weight: bold; display: none; }
+    </style>
+</head>
+<body>
+    <div class="container" id="dashboard-container" data-initial-sessions='<%- JSON.stringify(sessions) %>'>
+        <h1>Welcome, <%= tenant.name %></h1>
+        <p class="welcome-message">Manage your WhatsApp sessions and settings here. Your account can have a maximum of <strong><%= tenant.maxSessions %></strong> session(s).</p>
+        
+        <div class="section">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>Your Sessions</h2>
+                <!-- START OF CHANGE: Button is now always visible -->
+                <button class="btn-primary" onclick="startSession()">Start New Session</button>
+                <!-- END OF CHANGE -->
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Session ID</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="sessions-table-body"></tbody>
+            </table>
+            <p id="no-sessions-message" style="display: none; margin-top: 1rem;">No sessions found. Click the button above to start one.</p>
+        </div>
+
+        <div class="section">
+            <h2>Your Settings</h2>
+            <form id="settings-form" class="settings-form" onsubmit="saveSettings(event)" accept-charset="UTF-8">
+                <div class="form-group">
+                    <label for="aiSystemPrompt">AI System Prompt</label>
+                    <p style="font-size: 0.9em; color: #667781; margin-top: 0;">Define the core instructions and personality for your AI assistant.</p>
+                    <textarea id="aiSystemPrompt" name="aiSystemPrompt" placeholder="e.g., You are a helpful assistant..."><%= tenant.aiSystemPrompt || '' %></textarea>
+                </div>
+                <button type="submit" class="btn-success">Save Settings</button>
+                <p id="settings-feedback"></p>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const tenantId = "<%= tenant.id %>";
+        const token = "<%= token %>"; // Passed for session creation requests
+        const dashboardContainer = document.getElementById('dashboard-container');
+        const sessionsTableBody = document.getElementById('sessions-table-body');
+        const noSessionsMessage = document.getElementById('no-sessions-message');
+
+        function updateSessionStatusUI(sessions) {
+            sessionsTableBody.innerHTML = '';
+            noSessionsMessage.style.display = sessions.length === 0 ? 'block' : 'none';
+
+            sessions.forEach(session => {
+                const row = sessionsTableBody.insertRow();
+                const sessionName = session.name ? session.name : '<em>Not Set</em>';
+                let actionsHtml = `<button class="btn-secondary" onclick="editSessionName('${session.id}', '${session.name || ''}')">Name</button>
+                                   <button class="btn-danger" onclick="terminateSession('${session.id}')">Terminate</button>`;
+                
+                if (session.status === 'PENDING_SCAN') {
+                    actionsHtml += ` <button class="btn-info" onclick="showLink('${session.id}')">Show QR Link</button>`;
+                }
+                row.innerHTML = `
+                    <td>${sessionName}</td>
+                    <td><code>${session.id}</code></td>
+                    <td class="status status-${session.status.toLowerCase()}">${session.status}</td>
+                    <td class="actions">${actionsHtml}</td>
+                `;
+            });
+        }
+
+        async function refreshStatus() {
+            try {
+                const response = await fetch(`/api/tenant/status?token=${token}`);
+                if (!response.ok) throw new Error('Network error');
+                const data = await response.json();
+                updateSessionStatusUI(data.sessions);
+            } catch (error) {
+                console.error('Failed to refresh status:', error);
+            }
+        }
+
+        async function startSession() {
+            try {
+                // We no longer need a confirmation prompt here, as the user can always try
+                const response = await fetch(`/sessions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tenantId: tenantId })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message); // This will catch the "limit reached" error
+                alert('New session is starting! The dashboard will update shortly.');
+                refreshStatus();
+            } catch (error) {
+                alert('Error starting session: ' + error.message);
+            }
+        }
+        
+        async function editSessionName(sessionId, currentName) {
+            const newName = prompt("Enter a new name for this session:", currentName);
+            if (newName === null || newName.trim() === '') return;
+            try {
+                const response = await fetch(`/api/sessions/${sessionId}/name?token=${token}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newName })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message);
+                alert('Session name updated!');
+                refreshStatus();
+            } catch (error) {
+                alert('Error updating name: ' + error.message);
+            }
+        }
+
+        async function terminateSession(sessionId) {
+            if (!confirm(`Are you sure you want to terminate session ${sessionId}?`)) return;
+            try {
+                const response = await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message);
+                alert('Session terminated successfully.');
+                refreshStatus();
+            } catch (error) {
+                alert('Error terminating session: ' + error.message);
+            }
+        }
+
+        function showLink(sessionId) {
+            const url = `${window.location.origin}/user/session/${sessionId}`;
+            window.open(url, '_blank');
+        }
+
+        async function saveSettings(event) {
+            event.preventDefault();
+            const feedbackEl = document.getElementById('settings-feedback');
+            feedbackEl.style.display = 'none';
+            const aiSystemPrompt = document.getElementById('aiSystemPrompt').value;
+            try {
+                const response = await fetch(`/user/settings?token=${token}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ aiSystemPrompt: aiSystemPrompt })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message);
+                feedbackEl.textContent = '✅ Settings saved successfully!';
+                feedbackEl.style.color = '#28a745';
+                feedbackEl.style.display = 'block';
+            } catch (error) {
+                feedbackEl.textContent = `❌ Error: ${error.message}`;
+                feedbackEl.style.color = '#dc3545';
+                feedbackEl.style.display = 'block';
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            const initialSessionsData = dashboardContainer.dataset.initialSessions;
+            if (initialSessionsData) {
+                try {
+                    const initialSessions = JSON.parse(initialSessionsData);
+                    updateSessionStatusUI(initialSessions);
+                } catch (e) {
+                    console.error("Could not parse initial session data", e);
+                    updateSessionStatusUI([]);
+                }
+            }
+            setInterval(refreshStatus, 4000);
+        });
+    </script>
+</body>
+</html>

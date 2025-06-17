@@ -1,0 +1,28 @@
+# Node.js dependencies
+/node_modules
+/.wwebjs_auth
+/.wwebjs_cache
+
+# Logs
+npm-debug.log*
+*.log
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+# This file contains secrets and should NEVER be committed.
+.env
+whatsapp-service.db
+# Application-specific session data
+# Contains sensitive authentication tokens for each tenant.
+/sessions/
+/backups/
+
+# Database file
+# Contains tenant and session data. Should not be in version control.
+whatsapp-service.db
+whatsapp-service.db-journal
+
+# Operating System files
+.DS_Store
+Thumbs.db
