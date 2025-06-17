@@ -33,7 +33,7 @@ app.use(session({
     // Use the new persistent store
     store: new SQLiteStore({
         db: 'sessions.db', // The file where sessions will be stored
-        dir: './',         // The directory to store the file in (project root)
+        dir: './data',         // The directory to store the file in (project root)
         table: 'admin_sessions'
     }),
     secret: SESSION_SECRET,

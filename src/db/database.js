@@ -48,7 +48,11 @@ const createTestUser = () => {
 
 const initDb = () => {
     return new Promise((resolve, reject) => {
-        const dbPath = process.env.DATABASE_PATH || './whatsapp-service.db';
+        const dbPath = process.env.DATABASE_PATH || './data/whatsapp-service.db';
+        const dbDir = path.dirname(dbPath);
+        if (!fs.existsSync(dbDir)) {
+            fs.mkdirSync(dbDir, { recursive: true });
+        }        
         
         db = new sqlite3.Database(dbPath, (err) => {
             if (err) { console.error('CRITICAL: Error opening database', err.message); return reject(err); }
