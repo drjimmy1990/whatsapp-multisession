@@ -7,6 +7,7 @@ const session = require('express-session'); // <-- Import express-session
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const SQLiteStore = require('connect-sqlite3')(session);
 
 const SessionManager = require('./src/managers/SessionManager');
 const db = require('./src/db/database');
