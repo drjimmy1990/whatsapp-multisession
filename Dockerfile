@@ -6,7 +6,7 @@ FROM mcr.microsoft.com/playwright/python:v1.44.0-jammy
 
 # 2. Install the latest Node.js version (as of writing, v22 line).
 # This follows the manual installation pattern you provided.
-ARG NODE_VERSION=22.2.0
+ARG NODE_VERSION=22.16.0
 ARG NODE_ARCH=x64
 RUN apt-get update && \
     apt-get install -y curl xz-utils && \
@@ -18,11 +18,6 @@ RUN apt-get update && \
 
 # 3. Set the working directory for our application.
 WORKDIR /app
-
-# 4. Set the environment variable to make Puppeteer find the browser automatically.
-# The Playwright image stores Chromium in a versioned folder inside /ms-playwright/.
-# This command finds the correct path and sets it, so you don't have to.
-ENV PUPPETEER_EXECUTABLE_PATH=$(find /ms-playwright/ -type f -name chrome-linux -printf "%p" -quit)
 
 # 5. Copy package files to leverage Docker's layer caching.
 COPY package*.json ./
