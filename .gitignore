@@ -13,7 +13,7 @@ yarn-error.log*
 # Environment variables
 # This file contains secrets and should NEVER be committed.
 .env
-./sessions.db
+sessions.db
 # Application-specific session data
 # Contains sensitive authentication tokens for each tenant.
 /sessions/
