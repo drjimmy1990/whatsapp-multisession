@@ -1,42 +1,46 @@
-// server.js
+// server.js (Final Corrected Version for Local and Production)
 require('dotenv').config();
 
 const express = require('express');
 const path = require('path');
-const session = require('express-session'); // <-- Import express-session
+const fs = require('fs'); // <-- Import 'fs'
+const session = require('express-session');
+const SQLiteStore = require('connect-sqlite3')(session);
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const SQLiteStore = require('connect-sqlite3')(session);
 
 const SessionManager = require('./src/managers/SessionManager');
 const db = require('./src/db/database');
 const { createTenantWithPassword } = require('./src/utils/user');
 
+// --- FIX: Proactively create the data directory ---
+const dataDir = path.join(__dirname, 'data');
+if (!fs.existsSync(dataDir)) {
+    console.log(`[SYSTEM] Data directory not found. Creating it at: ${dataDir}`);
+    fs.mkdirSync(dataDir, { recursive: true });
+}
+// --------------------------------------------------
 
 const app = express();
 app.use(express.json());
 const PORT = process.env.PORT || 5001;
-app.set('trust proxy', 1); 
 
+app.set('trust proxy', 1);
 
-// --- Environment Variable Checks ---
 const JWT_SECRET = process.env.JWT_SECRET;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const SESSION_SECRET = process.env.SESSION_SECRET;
-
 if (!JWT_SECRET || !ADMIN_PASSWORD || !SESSION_SECRET) {
     console.error('FATAL ERROR: One or more required environment variables are not set.');
     console.error('Please ensure JWT_SECRET, ADMIN_PASSWORD, and SESSION_SECRET are defined in your .env file.');
     process.exit(1);
 }
 
-// --- MODIFIED: Session Middleware Setup ---
 app.use(session({
-    // Use the new persistent store
     store: new SQLiteStore({
-        db: 'sessions.db', // The file where sessions will be stored
-        dir: './data',         // The directory to store the file in (project root)
+        db: 'sessions.db',
+        dir: './data', // Now we know this directory exists
         table: 'admin_sessions'
     }),
     secret: SESSION_SECRET,
@@ -44,9 +48,8 @@ app.use(session({
     saveUninitialized: false,
     cookie: { 
         httpOnly: true,
-        secure: true, 
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 1000 * 60 * 60 * 8 // 8 hours
+        secure: true,
+        maxAge: 1000 * 60 * 60 * 8
     }
 }));
 // --- END OF MODIFICATION ---
