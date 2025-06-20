@@ -39,11 +39,12 @@
         .modal-content .form-group { margin-bottom: 1rem; }
         .modal-content label { display: block; margin-bottom: 5px; font-weight: bold; }
         .modal-content input { width: 100%; padding: 8px; box-sizing: border-box; }
+        .password-input-container { position: relative; }
+        .password-toggle-btn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #555; padding: 5px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- START OF CHANGE -->
         <div class="header">
             <h1>WhatsApp Service - Admin Panel</h1>
             <div class="header-info">
@@ -51,7 +52,6 @@
                 <button class="btn-warning" onclick="logout()">Logout</button>
             </div>
         </div>
-        <!-- END OF CHANGE -->
         
         <div class="section">
             <h2>Tenants Management</h2>
@@ -106,7 +106,7 @@
     <!-- Edit Tenant Modal -->
     <div id="edit-tenant-modal" class="modal">
         <div class="modal-content">
-            <span class="close-button" onclick="closeModal()">×</span>
+            <span class="close-button" onclick="closeModal('edit-tenant-modal')">×</span>
             <h3>Edit Tenant</h3>
             <form id="edit-tenant-form" onsubmit="handleEditTenant(event)">
                 <input type="hidden" id="edit-tenant-id" name="tenantId">
@@ -127,6 +127,26 @@
         </div>
     </div>
 
+    <!-- Reset Password Modal -->
+    <div id="reset-password-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal('reset-password-modal')">×</span>
+            <h3>Reset Password for <span id="reset-password-tenant-name"></span></h3>
+            <form id="reset-password-form" onsubmit="handleResetPassword(event)">
+                <input type="hidden" id="reset-password-tenant-id">
+                <div class="form-group">
+                    <label for="new-password">New Password (min. 6 characters)</label>
+                    <div class="password-input-container">
+                        <input type="password" id="new-password" name="password" required minlength="6">
+                        <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('new-password', this)">Show</button>
+                    </div>
+                </div>
+                <button type="submit" class="btn-success">Save New Password</button>
+            </form>
+        </div>
+    </div>
+
+
     <script>
         const tenantsTableBody = document.getElementById('tenants-table-body');
         const sessionsTableBody = document.getElementById('sessions-table-body');
@@ -135,6 +155,7 @@
         const lastUpdatedEl = document.getElementById('last-updated');
         const addTenantForm = document.getElementById('add-tenant-form');
         const editTenantModal = document.getElementById('edit-tenant-modal');
+        const resetPasswordModal = document.getElementById('reset-password-modal');
         
         let AppData = { tenants: [], sessions: [] };
 
@@ -152,6 +173,7 @@
                     <td class="actions">
                         <button class="btn-primary" onclick="startSession('${tenant.id}')">Start Session</button>
                         <button class="btn-secondary" onclick="openEditModal('${tenant.id}')">Edit</button>
+                        <button class="btn-warning" onclick="openResetPasswordModal('${tenant.id}')">Password</button>
                         <button class="btn-danger" onclick="deleteTenant('${tenant.id}')">Delete</button>
                     </td>
                 `;
@@ -182,7 +204,6 @@
             try {
                 const response = await fetch('/api/dashboard-data');
                 if (response.status === 401 || response.status === 403) {
-                    // If we get an unauthorized error, redirect to login
                     window.location.href = '/admin/login';
                     return;
                 }
@@ -197,7 +218,6 @@
             }
         }
 
-        // --- START OF CHANGE ---
         async function logout() {
             try {
                 const response = await fetch('/api/admin/logout', { method: 'POST' });
@@ -207,7 +227,6 @@
                 alert('Logout failed. Please try again.');
             }
         }
-        // --- END OF CHANGE ---
 
         async function addTenant(event) {
             event.preventDefault();
@@ -273,6 +292,8 @@
             prompt("Send this link to the user to scan the QR code:", url);
         }
 
+        // --- MODAL FUNCTIONS ---
+
         function openEditModal(tenantId) {
             const tenant = AppData.tenants.find(t => t.id === tenantId);
             if (!tenant) return;
@@ -283,8 +304,23 @@
             editTenantModal.style.display = 'block';
         }
 
-        function closeModal() {
-            editTenantModal.style.display = 'none';
+        function openResetPasswordModal(tenantId) {
+            const tenant = AppData.tenants.find(t => t.id === tenantId);
+            if (!tenant) return;
+            document.getElementById('reset-password-tenant-id').value = tenant.id;
+            document.getElementById('reset-password-tenant-name').textContent = tenant.name;
+            document.getElementById('reset-password-form').reset(); // Clear old password
+            
+            // Ensure password field is hidden by default
+            const passwordInput = document.getElementById('new-password');
+            passwordInput.type = 'password';
+            passwordInput.nextElementSibling.textContent = 'Show';
+
+            resetPasswordModal.style.display = 'block';
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
         }
 
         async function handleEditTenant(event) {
@@ -303,16 +339,52 @@
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.message);
                 alert('Tenant updated successfully!');
-                closeModal();
+                closeModal('edit-tenant-modal');
                 refreshData();
             } catch (error) {
                 alert('Error updating tenant: ' + error.message);
             }
         }
 
+        async function handleResetPassword(event) {
+            event.preventDefault();
+            const tenantId = document.getElementById('reset-password-tenant-id').value;
+            const password = document.getElementById('new-password').value;
+
+            if (!confirm(`Are you sure you want to reset the password for tenant "${tenantId}"?`)) return;
+
+            try {
+                const response = await fetch(`/api/tenants/${tenantId}/password`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message);
+                alert('Password updated successfully!');
+                closeModal('reset-password-modal');
+            } catch (error) {
+                alert('Error resetting password: ' + error.message);
+            }
+        }
+        
+        function togglePasswordVisibility(inputId, button) {
+            const passwordInput = document.getElementById(inputId);
+            if (passwordInput.type === "password") {
+                passwordInput.type = "text";
+                button.textContent = "Hide";
+            } else {
+                passwordInput.type = "password";
+                button.textContent = "Show";
+            }
+        }
+        
         window.onclick = function(event) {
             if (event.target == editTenantModal) {
-                closeModal();
+                closeModal('edit-tenant-modal');
+            }
+            if (event.target == resetPasswordModal) {
+                closeModal('reset-password-modal');
             }
         }
 

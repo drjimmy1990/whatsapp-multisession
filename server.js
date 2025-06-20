@@ -106,7 +106,24 @@ app.post('/api/tenants', protectAdmin, async (req, res) => { const { tenantId, n
 app.delete('/api/tenants/:tenantId', protectAdmin, async (req, res) => { const { tenantId } = req.params; try { await SessionManager.terminateTenantSessions(tenantId); await db.deleteTenant(tenantId); res.status(200).json({ status: 'success', message: 'Tenant and all associated sessions deleted.' }); } catch (e) { res.status(500).json({ status: 'error', message: 'Failed to delete tenant.' }); } });
 app.put('/api/tenants/:tenantId', protectAdmin, async (req, res) => { const { tenantId } = req.params; const { name, webhookUrl, maxSessions } = req.body; if (!name) { return res.status(400).json({ status: 'error', message: 'Tenant name is required.' }); } try { await db.updateTenantSettings(tenantId, { name, webhookUrl, maxSessions: parseInt(maxSessions, 10) }); res.status(200).json({ status: 'success', message: 'Tenant updated successfully.' }); } catch (e) { res.status(500).json({ status: 'error', message: 'Failed to update tenant.' }); } });
 
+app.put('/api/tenants/:tenantId/password', protectAdmin, async (req, res) => {
+    const { tenantId } = req.params;
+    const { password } = req.body;
 
+    if (!password || password.length < 6) {
+        return res.status(400).json({ status: 'error', message: 'Password is required and must be at least 6 characters long.' });
+    }
+
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        await db.updateTenantPassword(tenantId, hashedPassword);
+        console.log(`[API] Admin successfully reset password for tenant: ${tenantId}`);
+        res.status(200).json({ status: 'success', message: 'Tenant password updated successfully.' });
+    } catch (e) {
+        console.error(`[API] Error updating password for tenant ${tenantId}:`, e);
+        res.status(500).json({ status: 'error', message: 'Failed to update tenant password.' });
+    }
+});
 // --- START OF DEFINITIVE FIX FOR POST /SESSIONS ---
 app.post('/sessions', async (req, res) => {
     let tenantId;

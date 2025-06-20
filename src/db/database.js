@@ -119,6 +119,11 @@ const getActiveSessionsForTenant = (tenantId) => {
     return all(sql, [tenantId, ...activeStates]);
 };
 
+const updateTenantPassword = (tenantId, hashedPassword) => {
+    const sql = 'UPDATE tenants SET hashedPassword = ? WHERE id = ?';
+    return run(sql, [hashedPassword, tenantId]);
+};
+
 function run(sql, params = []) { return new Promise((resolve, reject) => { db.run(sql, params, function (err) { if (err) reject(err); else resolve({ lastID: this.lastID, changes: this.changes }); }); }); }
 function get(sql, params = []) { return new Promise((resolve, reject) => { db.get(sql, params, (err, result) => { if (err) reject(err); else resolve(result); }); }); }
 function all(sql, params = []) { return new Promise((resolve, reject) => { db.all(sql, params, (err, rows) => { if (err) reject(err); else resolve(rows); }); }); }
@@ -141,5 +146,5 @@ const updateTenantSettings = (tenantId, settings) => { const fields = Object.key
 module.exports = {
     initDb, createSession, updateSession, getSession, getAllActiveSessions, getTenant,
     getAllTenants, getAllSessions, deleteTenant, deleteSession, createTenant, 
-    cleanUpStaleSessions, getSessionsByTenant, getTenantByUsername, updateTenantSettings, getActiveSessionsForTenant
+    cleanUpStaleSessions, getSessionsByTenant, getTenantByUsername, updateTenantSettings, getActiveSessionsForTenant, updateTenantPassword 
 };
