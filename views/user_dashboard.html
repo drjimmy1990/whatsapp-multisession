@@ -42,9 +42,7 @@
         <div class="section">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <h2>Your Sessions</h2>
-                <!-- START OF CHANGE: Button is now always visible -->
                 <button class="btn-primary" onclick="startSession()">Start New Session</button>
-                <!-- END OF CHANGE -->
             </div>
             <table>
                 <thead>
@@ -76,7 +74,7 @@
 
     <script>
         const tenantId = "<%= tenant.id %>";
-        const token = "<%= token %>"; // Passed for session creation requests
+        const token = "<%= token %>"; 
         const dashboardContainer = document.getElementById('dashboard-container');
         const sessionsTableBody = document.getElementById('sessions-table-body');
         const noSessionsMessage = document.getElementById('no-sessions-message');
@@ -114,22 +112,25 @@
             }
         }
 
+        // --- START OF CHANGE ---
         async function startSession() {
             try {
-                // We no longer need a confirmation prompt here, as the user can always try
-                const response = await fetch(`/sessions`, {
+                // FIX: Pass the token in the query string, which is what the server endpoint expects for users.
+                // Also pass the tenantId in the body for clarity.
+                const response = await fetch(`/sessions?token=${token}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tenantId: tenantId })
                 });
                 const result = await response.json();
-                if (!response.ok) throw new Error(result.message); // This will catch the "limit reached" error
+                if (!response.ok) throw new Error(result.message);
                 alert('New session is starting! The dashboard will update shortly.');
-                refreshStatus();
+                await refreshStatus();
             } catch (error) {
                 alert('Error starting session: ' + error.message);
             }
         }
+        // --- END OF CHANGE ---
         
         async function editSessionName(sessionId, currentName) {
             const newName = prompt("Enter a new name for this session:", currentName);
@@ -143,7 +144,7 @@
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.message);
                 alert('Session name updated!');
-                refreshStatus();
+                await refreshStatus();
             } catch (error) {
                 alert('Error updating name: ' + error.message);
             }
@@ -152,11 +153,13 @@
         async function terminateSession(sessionId) {
             if (!confirm(`Are you sure you want to terminate session ${sessionId}?`)) return;
             try {
-                const response = await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+                const response = await fetch(`/api/user/sessions/${sessionId}?token=${token}`, { 
+                    method: 'DELETE'
+                });
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.message);
                 alert('Session terminated successfully.');
-                refreshStatus();
+                await refreshStatus();
             } catch (error) {
                 alert('Error terminating session: ' + error.message);
             }

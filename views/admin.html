@@ -200,7 +200,8 @@
         // --- START OF CHANGE ---
         async function logout() {
             try {
-                await fetch('/api/admin/logout', { method: 'POST' });
+                const response = await fetch('/api/admin/logout', { method: 'POST' });
+                if (!response.ok) throw new Error('Logout failed');
                 window.location.href = '/admin/login';
             } catch (error) {
                 alert('Logout failed. Please try again.');

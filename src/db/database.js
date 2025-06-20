@@ -48,6 +48,7 @@ const createTestUser = () => {
     });
 };
 
+
 const initDb = () => {
     return new Promise((resolve, reject) => {
         // Use a subdirectory for the database files
@@ -107,6 +108,17 @@ const initDb = () => {
 };
 
 // --- Helper Promise Wrappers and Public Functions remain the same ---
+const getActiveSessionsForTenant = (tenantId) => {
+    const activeStates = ['INITIALIZING', 'PENDING_SCAN', 'CONNECTED'];
+    const placeholders = activeStates.map(() => '?').join(','); // Creates '?,?,?'
+    const sql = `
+        SELECT * FROM sessions 
+        WHERE tenantId = ? 
+        AND status IN (${placeholders})
+    `;
+    return all(sql, [tenantId, ...activeStates]);
+};
+
 function run(sql, params = []) { return new Promise((resolve, reject) => { db.run(sql, params, function (err) { if (err) reject(err); else resolve({ lastID: this.lastID, changes: this.changes }); }); }); }
 function get(sql, params = []) { return new Promise((resolve, reject) => { db.get(sql, params, (err, result) => { if (err) reject(err); else resolve(result); }); }); }
 function all(sql, params = []) { return new Promise((resolve, reject) => { db.all(sql, params, (err, rows) => { if (err) reject(err); else resolve(rows); }); }); }
@@ -129,5 +141,5 @@ const updateTenantSettings = (tenantId, settings) => { const fields = Object.key
 module.exports = {
     initDb, createSession, updateSession, getSession, getAllActiveSessions, getTenant,
     getAllTenants, getAllSessions, deleteTenant, deleteSession, createTenant, 
-    cleanUpStaleSessions, getSessionsByTenant, getTenantByUsername, updateTenantSettings
+    cleanUpStaleSessions, getSessionsByTenant, getTenantByUsername, updateTenantSettings, getActiveSessionsForTenant
 };
