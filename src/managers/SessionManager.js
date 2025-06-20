@@ -132,7 +132,56 @@ class SessionManager {
         // Delegate the core logic to the WhatsAppWrapper instance
         return bot.sendUrlMedia(chatId, mediaUrl, { caption });
     }
+    async terminateSession(sessionId) {
+        const bot = this.sessions.get(sessionId);
+        if (bot && bot instanceof WhatsAppWrapper) {
+            await bot.logout(); // This also deletes the session folder
+        } else {
+            // If the session is not in the active map (e.g., it's in an ERROR state),
+            // we still need to ensure its session folder is cleaned up.
+            console.log(`[Manager] Session ${sessionId} not in active map. Attempting manual cleanup.`);
+            const wrapper = new WhatsAppWrapper({ session: { clientId: sessionId } });
+            await wrapper.logout();
+        }
 
+        // Clean up internal state and database record
+        const session = await db.getSession(sessionId);
+        if (session) {
+            this.initializingTenants.delete(session.tenantId);
+        }
+        this.sessions.delete(sessionId);
+        await db.deleteSession(sessionId); // This will cascade and delete the session from the DB
+        console.log(`[Manager] Session ${sessionId} has been terminated and removed.`);
+    }
+
+    /**
+     * Finds all sessions belonging to a tenant and terminates them one by one.
+     * This is used when an admin deletes a tenant.
+     * @param {string} tenantId The ID of the tenant to clear.
+     */
+    async terminateTenantSessions(tenantId) {
+        console.log(`[Manager] Terminating all sessions for tenant: ${tenantId}`);
+        const sessionsToDelete = await db.getSessionsByTenant(tenantId);
+        
+        if (sessionsToDelete.length === 0) {
+            console.log(`[Manager] No sessions found for tenant ${tenantId}. Nothing to do.`);
+            return;
+        }
+
+        console.log(`[Manager] Found ${sessionsToDelete.length} sessions to terminate.`);
+        
+        // Create a list of promises to run all terminations in parallel
+        const terminationPromises = sessionsToDelete.map(session => 
+            this.terminateSession(session.id).catch(e => 
+                console.error(`[Manager] Error terminating session ${session.id} during tenant cleanup:`, e)
+            )
+        );
+        
+        await Promise.all(terminationPromises);
+        console.log(`[Manager] Finished terminating all sessions for tenant: ${tenantId}`);
+    }
+
+    
     // --- END OF NEW METHODS ---
 
     async terminateSession(sessionId) {
