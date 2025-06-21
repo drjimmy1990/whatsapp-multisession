@@ -191,7 +191,21 @@ app.post('/sessions', async (req, res) => {
     }
 });
 // --- END OF DEFINITIVE FIX FOR POST /SESSIONS ---
-
+app.post('/sessions/:sessionId/send', async (req, res) => { 
+    const { sessionId } = req.params; 
+    const { chatId, text } = req.body; 
+    if (!chatId || !text) { return res.status(400).json({ status: 'error', message: 'Missing "chatId" or "text" in request body.' }); } 
+    try { 
+        const success = await SessionManager.sendHumanizedMessage(sessionId, chatId, text); 
+        if (success) { 
+            return res.status(200).json({ status: 'success', message: 'Message sent successfully.' }); 
+        } else { 
+            return res.status(500).json({ status: 'error', message: 'Failed to send message.' }); 
+        } 
+    } catch (e) { 
+        res.status(500).json({ status: 'error', message: 'An internal error occurred.' }); 
+    } 
+});
 
 app.delete('/api/sessions/:sessionId', protectAdmin, async (req, res) => { const { sessionId } = req.params; try { await SessionManager.terminateSession(sessionId); res.status(200).json({ status: 'success', message: 'Session terminated.' }); } catch (e) { res.status(500).json({ status: 'error', message: 'Failed to terminate session.' }); } });
 app.delete('/api/user/sessions/:sessionId', protectUser, async (req, res) => { const { sessionId } = req.params; const tenantId = req.tenant.tenantId; try { const session = await db.getSession(sessionId); if (!session) { return res.status(404).json({ status: 'error', message: 'Session not found.' }); } if (session.tenantId !== tenantId) { return res.status(403).json({ status: 'error', message: 'Forbidden. You do not own this session.' }); } await SessionManager.terminateSession(sessionId); res.status(200).json({ status: 'success', message: 'Session terminated.' }); } catch (e) { res.status(500).json({ status: 'error', message: 'Failed to terminate session.' }); } });
