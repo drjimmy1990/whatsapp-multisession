@@ -32,6 +32,14 @@
         .settings-form textarea { min-height: 120px; resize: vertical; }
         .btn-success { background-color: #28a745; }
         #settings-feedback { margin-top: 10px; font-weight: bold; display: none; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem; margin-top: 1.5rem; margin-bottom: 1.5rem; }
+        .form-row { display: flex; gap: 10px; }
+        .form-row input { width: 50%; }
+        .settings-form small { display: block; margin-top: 5px; margin-bottom: 1rem; color: #667781; font-size: 0.85em; }
+        input[type="checkbox"] { width: auto; transform: scale(1.2); }
+        #humanization-feedback { margin-top: 10px; font-weight: bold; display: none; }
+        .warning-box { background-color: #fffbe6; border: 1px solid #ffe58f; border-radius: 4px; padding: 15px; margin-top: 1rem; display: none; }
+        .warning-box strong { color: #fa8c16; }
     </style>
 </head>
 <body>
@@ -68,6 +76,58 @@
                 </div>
                 <button type="submit" class="btn-success">Save Settings</button>
                 <p id="settings-feedback"></p>
+            </form>
+        </div>
+                <div class="section">
+            <h2>Humanization Settings</h2>
+            <p style="font-size: 0.9em; color: #667781; margin-top: 0;">These settings control the bot's typing behavior to avoid detection and bans by WhatsApp. It is highly recommended to keep this enabled.</p>
+            
+            <form id="humanization-form" class="settings-form" onsubmit="saveHumanizationSettings(event)">
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" id="enableHumanization" name="enableHumanization" onchange="toggleWarning()" <%- tenant.enableHumanization ? 'checked' : '' %>>
+                        Enable Human-like Typing
+                    </label>
+                </div>
+
+                <!-- This is the new warning box -->
+                <div id="humanization-warning" class="warning-box">
+                    <strong>Warning:</strong> Disabling humanization will make the bot send messages instantly. This significantly increases the risk of your WhatsApp number being flagged or banned for spam-like activity. Proceed with caution.
+                </div>
+                
+                <div class="form-grid">
+                    <div>
+                        <label>Typing Speed (ms)</label>
+                        <div class="form-row">
+                            <input type="number" id="minCharDelay" name="minCharDelay" value="<%= tenant.minCharDelay %>" required>
+                            <input type="number" id="maxCharDelay" name="maxCharDelay" value="<%= tenant.maxCharDelay %>" required>
+                        </div>
+                        <small>Min/Max delay between each typed character.</small>
+                        
+                        <label>Sending Pause (ms)</label>
+                        <div class="form-row">
+                            <input type="number" id="minPauseAfterTyping" name="minPauseAfterTyping" value="<%= tenant.minPauseAfterTyping %>" required>
+                            <input type="number" id="maxPauseAfterTyping" name="maxPauseAfterTyping" value="<%= tenant.maxPauseAfterTyping %>" required>
+                        </div>
+                        <small>Min/Max pause after typing, before sending.</small>
+                    </div>
+
+                    <div>
+                        <label>Typo Simulation</label>
+                        <div class="form-row">
+                            <input type="number" step="0.01" min="0" max="1" id="errorProbability" name="errorProbability" value="<%= tenant.errorProbability %>" required>
+                        </div>
+                        <small>Typo chance per character (0.0 to 1.0).</small>
+
+                        <div class="form-row">
+                        <input type="number" min="0" id="maxBackspaceChars" name="maxBackspaceChars" value="<%= tenant.maxBackspaceChars %>" required>
+                        </div>
+                        <small>Max characters to delete when fixing a typo.</small>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-success">Save Humanization Settings</button>
+                <p id="humanization-feedback"></p>
             </form>
         </div>
     </div>
@@ -176,14 +236,15 @@
             feedbackEl.style.display = 'none';
             const aiSystemPrompt = document.getElementById('aiSystemPrompt').value;
             try {
-                const response = await fetch(`/user/settings?token=${token}`, {
+                // UPDATED: Point to the new, specific endpoint
+                const response = await fetch(`/user/settings/ai?token=${token}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ aiSystemPrompt: aiSystemPrompt })
                 });
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.message);
-                feedbackEl.textContent = '✅ Settings saved successfully!';
+                feedbackEl.textContent = '✅ AI settings saved successfully!';
                 feedbackEl.style.color = '#28a745';
                 feedbackEl.style.display = 'block';
             } catch (error) {
@@ -192,7 +253,44 @@
                 feedbackEl.style.display = 'block';
             }
         }
-        
+        function toggleWarning() {
+            const checkbox = document.getElementById('enableHumanization');
+            const warningBox = document.getElementById('humanization-warning');
+            warningBox.style.display = checkbox.checked ? 'none' : 'block';
+        }
+
+
+        // Ensure this function is present and correct
+        async function saveHumanizationSettings(event) {
+            event.preventDefault();
+            const feedbackEl = document.getElementById('humanization-feedback');
+            feedbackEl.textContent = '';
+            feedbackEl.style.display = 'none';
+
+            const form = document.getElementById('humanization-form');
+            const formData = new FormData(form);
+            
+            const settings = Object.fromEntries(formData.entries());
+            settings.enableHumanization = document.getElementById('enableHumanization').checked;
+
+            try {
+                const response = await fetch(`/user/settings/humanization?token=${token}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings)
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message);
+                
+                feedbackEl.textContent = '✅ Humanization settings saved successfully!';
+                feedbackEl.style.color = '#28a745';
+                feedbackEl.style.display = 'block';
+            } catch (error) {
+                feedbackEl.textContent = `❌ Error: ${error.message}`;
+                feedbackEl.style.color = '#dc3545';
+                feedbackEl.style.display = 'block';
+            }
+        }
         document.addEventListener('DOMContentLoaded', () => {
             const initialSessionsData = dashboardContainer.dataset.initialSessions;
             if (initialSessionsData) {
@@ -205,6 +303,7 @@
                 }
             }
             setInterval(refreshStatus, 4000);
+            toggleWarning(); 
         });
     </script>
 </body>

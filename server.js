@@ -200,7 +200,56 @@ app.post('/sessions/:sessionId/send', async (req, res) => { const { sessionId } 
 app.post('/api/sessions/:sessionId/send-media', async (req, res) => { const { sessionId } = req.params; const { chatId, mediaUrl, caption } = req.body; if (!chatId || !mediaUrl) { return res.status(400).json({ status: 'error', message: 'Missing "chatId" or "mediaUrl" in request body.' }); } try { const success = await SessionManager.sendUrlMedia(sessionId, chatId, mediaUrl, caption); if (success) { return res.status(200).json({ status: 'success', message: 'Media message sent successfully.' }); } else { return res.status(500).json({ status: 'error', message: 'Failed to send media message. The session might be offline or the URL is invalid.' }); } } catch (e) { const errorMessage = e.message.includes('MIME type') ? 'Could not determine file type from URL. Please use a direct link to a media file.' : 'An internal error occurred while sending media.'; res.status(500).json({ status: 'error', message: errorMessage }); } });
 app.get('/sessions/:sessionId/status', async (req, res) => { const { sessionId } = req.params; try { const session = await db.getSession(sessionId); if (!session) { return res.status(404).json({ status: 'error', message: 'Session not found.' }); } res.status(200).json({ status: 'success', data: session }); } catch (e) { res.status(500).json({ status: 'error', message: 'An internal error occurred.' }); } });
 app.get('/health', (req, res) => { res.status(200).json({ status: 'ok', uptime: `${process.uptime().toFixed(2)}s`, activeSessions: SessionManager.getActiveSessionsCount() }); });
-app.put('/user/settings', protectUser, async (req, res) => { const tenantId = req.tenant.tenantId; const { aiSystemPrompt } = req.body; try { await db.updateTenantSettings(tenantId, { aiSystemPrompt }); res.status(200).json({ status: 'success', message: 'Settings updated successfully.' }); } catch (e) { res.status(500).json({ status: 'error', message: 'Failed to update settings.' }); } });
+app.put('/user/settings/ai', protectUser, async (req, res) => {
+    const tenantId = req.tenant.tenantId;
+    const { aiSystemPrompt } = req.body;
+    try {
+        await db.updateTenantSettings(tenantId, { aiSystemPrompt });
+        res.status(200).json({ status: 'success', message: 'AI settings updated successfully.' });
+    } catch (e) {
+        console.error(`[API] Error updating AI settings for tenant ${tenantId}:`, e);
+        res.status(500).json({ status: 'error', message: 'Failed to update AI settings.' });
+    }
+});
+
+// Route for updating Humanization settings
+app.put('/user/settings/humanization', protectUser, async (req, res) => {
+    const tenantId = req.tenant.tenantId;
+    const { 
+        enableHumanization, minCharDelay, maxCharDelay, 
+        errorProbability, maxBackspaceChars, minPauseAfterTyping, maxPauseAfterTyping 
+    } = req.body;
+    
+    // --- FIX: Convert to numbers BEFORE validation ---
+    const numMinCharDelay = parseInt(minCharDelay, 10);
+    const numMaxCharDelay = parseInt(maxCharDelay, 10);
+    const numMinPauseAfterTyping = parseInt(minPauseAfterTyping, 10);
+    const numMaxPauseAfterTyping = parseInt(maxPauseAfterTyping, 10);
+
+    // Now, validate using the numbers
+    if (numMinCharDelay > numMaxCharDelay || numMinPauseAfterTyping > numMaxPauseAfterTyping) {
+        return res.status(400).json({ status: 'error', message: 'Min values cannot be greater than max values.' });
+    }
+
+    try {
+        // We can now use the numeric variables we already created
+        const settingsToUpdate = {
+            enableHumanization: !!enableHumanization,
+            minCharDelay: numMinCharDelay,
+            maxCharDelay: numMaxCharDelay,
+            errorProbability: parseFloat(errorProbability),
+            maxBackspaceChars: parseInt(maxBackspaceChars, 10),
+            minPauseAfterTyping: numMinPauseAfterTyping,
+            maxPauseAfterTyping: numMaxPauseAfterTyping,
+        };
+
+        await db.updateTenantSettings(tenantId, settingsToUpdate);
+        res.status(200).json({ status: 'success', message: 'Humanization settings updated successfully.' });
+    } catch (e) {
+        console.error(`[API] Error updating humanization settings for tenant ${tenantId}:`, e);
+        res.status(500).json({ status: 'error', message: 'Failed to update humanization settings.' });
+    }
+});
 app.get('/api/tenant/status', protectUser, async (req, res) => { const tenantId = req.tenant.tenantId; try { const sessions = await db.getSessionsByTenant(tenantId); res.status(200).json({ sessions }); } catch (e) { res.status(500).json({ error: "Failed to fetch tenant status" }); } });
 
 async function startServer() { try { await db.initDb(); await db.cleanUpStaleSessions(); const server = app.listen(PORT, async () => { console.log(`✅ WhatsApp Service API server is running on http://localhost:${PORT}`); await new Promise(resolve => setTimeout(resolve, 2000)); await restoreActiveSessions(); }); const gracefulShutdown = async () => { console.log('\n[SERVER] Received shutdown signal. Closing connections gracefully.'); server.close(async () => { await SessionManager.shutdown(); process.exit(0); }); }; process.on('SIGINT', gracefulShutdown); process.on('SIGTERM', gracefulShutdown); } catch (error) { console.error('Failed to start server:', error); process.exit(1); } }
