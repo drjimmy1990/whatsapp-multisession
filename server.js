@@ -66,8 +66,20 @@ const protectAdmin = (req, res, next) => {
 };
 
 const protectUser = (req, res, next) => {
-    const token = req.query.token;
-    if (!token) { return res.status(401).json({ status: 'error', message: 'No token provided.' }); }
+    let token;
+
+    // Look for the token in the Authorization header first
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+        token = req.headers.authorization.split(' ')[1];
+    } else {
+        // Fallback to the query parameter for now
+        token = req.query.token;
+    }
+
+    if (!token) {
+        return res.status(401).json({ status: 'error', message: 'No token provided.' });
+    }
+
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         req.tenant = decoded;
@@ -77,10 +89,20 @@ const protectUser = (req, res, next) => {
         return res.status(401).json({ status: 'error', message: 'Invalid token.' });
     }
 };
+// --- END OF MODIFICATION for protectUser ---
 
+
+// --- START OF MODIFICATION for protectUserView ---
 const protectUserView = (req, res, next) => {
-    const token = req.query.token;
-    if (!token) { return res.redirect('/login'); }
+    let token;
+
+    // We only need the query param for the initial page load
+    token = req.query.token;
+
+    if (!token) {
+        return res.redirect('/login');
+    }
+    
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         req.tenant = decoded;
@@ -90,7 +112,6 @@ const protectUserView = (req, res, next) => {
         res.redirect('/login');
     }
 };
-
 async function restoreActiveSessions() { console.log('[SYSTEM] Attempting to restore active sessions...'); try { const activeSessions = await db.getAllActiveSessions(); if (!activeSessions || activeSessions.length === 0) { return console.log('[SYSTEM] No active sessions found in DB to restore.'); } console.log(`[SYSTEM] Found ${activeSessions.length} session(s) to restore.`); for (const session of activeSessions) { SessionManager.startSession(session.id, session.tenantId, true); } } catch (e) { console.error('[SYSTEM] CRITICAL ERROR during session restoration:', e); } }
 
 app.get('/admin/login', (req, res) => res.render('admin_login.html'));
@@ -131,13 +152,12 @@ app.post('/sessions', async (req, res) => {
     let tenantId;
     let isUserRequest = false;
 
-    // A user authenticates with a JWT token in the query param.
+    // A user authenticates with a JWT in the Authorization header.
     // An admin authenticates with an express-session cookie.
-    const token = req.query.token;
-
-    if (token) {
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
         // This is a USER request.
         try {
+            const token = req.headers.authorization.split(' ')[1];
             const decoded = jwt.verify(token, JWT_SECRET);
             tenantId = decoded.tenantId;
             isUserRequest = true;
@@ -154,7 +174,6 @@ app.post('/sessions', async (req, res) => {
     }
 
     if (!tenantId) {
-        // This can only happen if an admin makes a request but forgets the tenantId in the body.
         return res.status(400).json({ status: 'error', message: 'Missing "tenantId" in request body.' });
     }
 
@@ -164,14 +183,13 @@ app.post('/sessions', async (req, res) => {
             return res.status(404).json({ status: 'error', message: 'Tenant not found.' });
         }
 
-        // IMPORTANT: The session limit check is ONLY applied if it's a user request.
-        // Admins are allowed to bypass this limit.
+        // Session limit check is ONLY applied if it's a user request.
         if (isUserRequest) {
             const activeSessions = await db.getActiveSessionsForTenant(tenantId);
             if (activeSessions.length >= tenant.maxSessions) {
                 return res.status(403).json({ 
                     status: 'error', 
-                    message: `Active session limit of ${tenant.maxSessions} reached. Please terminate an existing session to start a new one.` 
+                    message: `Active session limit of ${tenant.maxSessions} reached.` 
                 });
             }
         }

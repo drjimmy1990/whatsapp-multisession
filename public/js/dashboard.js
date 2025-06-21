@@ -32,7 +32,10 @@ function updateSessionStatusUI(sessions) {
 
 async function refreshStatus() {
     try {
-        const response = await fetch(`/api/tenant/status?token=${token}`);
+        // MODIFICATION: Use Authorization header
+        const response = await fetch(`/api/tenant/status`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
         if (!response.ok) throw new Error('Network error');
         const data = await response.json();
         updateSessionStatusUI(data.sessions);
@@ -43,10 +46,14 @@ async function refreshStatus() {
 
 async function startSession() {
     try {
-        const response = await fetch(`/sessions?token=${token}`, {
+        // MODIFICATION: Use Authorization header
+        const response = await fetch(`/sessions`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tenantId: tenantId })
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ tenantId: tenantId }) // tenantId is still needed for the body
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.message);
@@ -61,9 +68,13 @@ async function editSessionName(sessionId, currentName) {
     const newName = prompt("Enter a new name for this session:", currentName);
     if (newName === null || newName.trim() === '') return;
     try {
-        const response = await fetch(`/api/sessions/${sessionId}/name?token=${token}`, {
+        // MODIFICATION: Use Authorization header
+        const response = await fetch(`/api/sessions/${sessionId}/name`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify({ name: newName })
         });
         const result = await response.json();
@@ -78,8 +89,10 @@ async function editSessionName(sessionId, currentName) {
 async function terminateSession(sessionId) {
     if (!confirm(`Are you sure you want to terminate session ${sessionId}?`)) return;
     try {
-        const response = await fetch(`/api/user/sessions/${sessionId}?token=${token}`, {
-            method: 'DELETE'
+        // MODIFICATION: Use Authorization header
+        const response = await fetch(`/api/user/sessions/${sessionId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.message);
@@ -89,6 +102,7 @@ async function terminateSession(sessionId) {
         alert('Error terminating session: ' + error.message);
     }
 }
+
 
 function showLink(sessionId) {
     const url = `${window.location.origin}/user/session/${sessionId}`;
@@ -101,9 +115,13 @@ async function saveSettings(event) {
     feedbackEl.style.display = 'none';
     const aiSystemPrompt = document.getElementById('aiSystemPrompt').value;
     try {
-        const response = await fetch(`/user/settings/ai?token=${token}`, {
+        // MODIFICATION: Use Authorization header
+        const response = await fetch(`/user/settings/ai`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify({ aiSystemPrompt: aiSystemPrompt })
         });
         const result = await response.json();
@@ -117,12 +135,12 @@ async function saveSettings(event) {
         feedbackEl.style.display = 'block';
     }
 }
+
 function toggleWarning() {
     const checkbox = document.getElementById('enableHumanization');
     const warningBox = document.getElementById('humanization-warning');
     warningBox.style.display = checkbox.checked ? 'none' : 'block';
 }
-
 
 async function saveHumanizationSettings(event) {
     event.preventDefault();
@@ -137,9 +155,13 @@ async function saveHumanizationSettings(event) {
     settings.enableHumanization = document.getElementById('enableHumanization').checked;
 
     try {
-        const response = await fetch(`/user/settings/humanization?token=${token}`, {
+        // MODIFICATION: Use Authorization header
+        const response = await fetch(`/user/settings/humanization`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify(settings)
         });
         const result = await response.json();
