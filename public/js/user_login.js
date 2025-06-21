@@ -1,3 +1,4 @@
+// CoDev — A GPT 4.0 Virtual Developer, by  twitter.com/@etherlegend 
 // public/js/user_login.js
 
 const loginForm = document.getElementById('login-form');
@@ -23,8 +24,11 @@ loginForm.addEventListener('submit', async (event) => {
             throw new Error(result.message);
         }
 
-        // On successful login, redirect to the dashboard with the token
-        window.location.href = `/user/dashboard?token=${result.token}`;
+        // --- START OF MODIFICATION ---
+        // On successful login, store the token in localStorage and redirect.
+        localStorage.setItem('jwtToken', result.token);
+        window.location.href = '/user/dashboard';
+        // --- END OF MODIFICATION ---
 
     } catch (error) {
         errorMessageEl.textContent = error.message;

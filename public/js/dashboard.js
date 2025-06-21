@@ -1,10 +1,13 @@
+// CoDev — A GPT 4.0 Virtual Developer, by  twitter.com/@etherlegend 
 // public/js/dashboard.js
 
-// Read initial data from the container's data attributes
-const dashboardContainer = document.getElementById('dashboard-container');
-const token = dashboardContainer.dataset.token;
-const tenantId = dashboardContainer.dataset.tenantId;
+// --- START OF MODIFICATION ---
 
+// Global state
+let token = null;
+let tenantId = null;
+
+// DOM Elements
 const sessionsTableBody = document.getElementById('sessions-table-body');
 const noSessionsMessage = document.getElementById('no-sessions-message');
 
@@ -30,9 +33,64 @@ function updateSessionStatusUI(sessions) {
     });
 }
 
-async function refreshStatus() {
+function populateDashboard(data) {
+    const { tenant, sessions } = data;
+    tenantId = tenant.id; // Store tenantId for later use
+
+    // Populate Welcome Message
+    document.getElementById('welcome-header').textContent = `Welcome, ${tenant.name}`;
+    document.getElementById('welcome-message').innerHTML = `Manage your WhatsApp sessions and settings here. Your account can have a maximum of <strong>${tenant.maxSessions}</strong> session(s).`;
+    
+    // Populate Sessions Table
+    updateSessionStatusUI(sessions);
+
+    // Populate Settings Forms
+    document.getElementById('aiSystemPrompt').value = tenant.aiSystemPrompt || '';
+    
+    const humanizationCheckbox = document.getElementById('enableHumanization');
+    humanizationCheckbox.checked = tenant.enableHumanization;
+    document.getElementById('minCharDelay').value = tenant.minCharDelay;
+    document.getElementById('maxCharDelay').value = tenant.maxCharDelay;
+    document.getElementById('minPauseAfterTyping').value = tenant.minPauseAfterTyping;
+    document.getElementById('maxPauseAfterTyping').value = tenant.maxPauseAfterTyping;
+    document.getElementById('errorProbability').value = tenant.errorProbability;
+    document.getElementById('maxBackspaceChars').value = tenant.maxBackspaceChars;
+
+    toggleWarning(); // Update warning visibility based on checkbox state
+}
+
+async function initializeDashboard() {
+    token = localStorage.getItem('jwtToken');
+    if (!token) {
+        window.location.href = '/login';
+        return;
+    }
+
     try {
-        // MODIFICATION: Use Authorization header
+        const response = await fetch('/api/user/dashboard-data', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.status === 401) {
+             localStorage.removeItem('jwtToken');
+             window.location.href = '/login';
+             return;
+        }
+
+        if (!response.ok) {
+            throw new Error('Failed to load dashboard data.');
+        }
+
+        const result = await response.json();
+        populateDashboard(result.data);
+    } catch (error) {
+        console.error('Initialization Error:', error);
+        document.body.innerHTML = `<h1>Error</h1><p>Could not load dashboard. Please <a href="/login">try logging in again</a>.</p>`;
+    }
+}
+
+async function refreshSessions() {
+    try {
         const response = await fetch(`/api/tenant/status`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -45,20 +103,23 @@ async function refreshStatus() {
 }
 
 async function startSession() {
+    if (!tenantId) {
+        alert('Tenant information not loaded. Please refresh.');
+        return;
+    }
     try {
-        // MODIFICATION: Use Authorization header
         const response = await fetch(`/sessions`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ tenantId: tenantId }) // tenantId is still needed for the body
+            body: JSON.stringify({ tenantId: tenantId })
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.message);
         alert('New session is starting! The dashboard will update shortly.');
-        await refreshStatus();
+        await refreshSessions();
     } catch (error) {
         alert('Error starting session: ' + error.message);
     }
@@ -68,7 +129,6 @@ async function editSessionName(sessionId, currentName) {
     const newName = prompt("Enter a new name for this session:", currentName);
     if (newName === null || newName.trim() === '') return;
     try {
-        // MODIFICATION: Use Authorization header
         const response = await fetch(`/api/sessions/${sessionId}/name`, {
             method: 'PUT',
             headers: {
@@ -80,7 +140,7 @@ async function editSessionName(sessionId, currentName) {
         const result = await response.json();
         if (!response.ok) throw new Error(result.message);
         alert('Session name updated!');
-        await refreshStatus();
+        await refreshSessions();
     } catch (error) {
         alert('Error updating name: ' + error.message);
     }
@@ -89,7 +149,6 @@ async function editSessionName(sessionId, currentName) {
 async function terminateSession(sessionId) {
     if (!confirm(`Are you sure you want to terminate session ${sessionId}?`)) return;
     try {
-        // MODIFICATION: Use Authorization header
         const response = await fetch(`/api/user/sessions/${sessionId}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }
@@ -97,7 +156,7 @@ async function terminateSession(sessionId) {
         const result = await response.json();
         if (!response.ok) throw new Error(result.message);
         alert('Session terminated successfully.');
-        await refreshStatus();
+        await refreshSessions();
     } catch (error) {
         alert('Error terminating session: ' + error.message);
     }
@@ -115,7 +174,6 @@ async function saveSettings(event) {
     feedbackEl.style.display = 'none';
     const aiSystemPrompt = document.getElementById('aiSystemPrompt').value;
     try {
-        // MODIFICATION: Use Authorization header
         const response = await fetch(`/user/settings/ai`, {
             method: 'PUT',
             headers: {
@@ -155,7 +213,6 @@ async function saveHumanizationSettings(event) {
     settings.enableHumanization = document.getElementById('enableHumanization').checked;
 
     try {
-        // MODIFICATION: Use Authorization header
         const response = await fetch(`/user/settings/humanization`, {
             method: 'PUT',
             headers: {
@@ -178,16 +235,7 @@ async function saveHumanizationSettings(event) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    const initialSessionsData = dashboardContainer.dataset.initialSessions;
-    if (initialSessionsData) {
-        try {
-            const initialSessions = JSON.parse(initialSessionsData);
-            updateSessionStatusUI(initialSessions);
-        } catch (e) {
-            console.error("Could not parse initial session data", e);
-            updateSessionStatusUI([]);
-        }
-    }
-    setInterval(refreshStatus, 4000);
-    toggleWarning();
+    initializeDashboard();
+    setInterval(refreshSessions, 4000);
 });
+// --- END OF MODIFICATION ---

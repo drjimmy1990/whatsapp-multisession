@@ -1,3 +1,4 @@
+<!-- CoDev — A GPT 4.0 Virtual Developer, by  twitter.com/@etherlegend -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -39,18 +40,18 @@
         input[type="checkbox"] { width: auto; transform: scale(1.2); }
         #humanization-feedback { margin-top: 10px; font-weight: bold; display: none; }
         .warning-box { background-color: #fffbe6; border: 1px solid #ffe58f; border-radius: 4px; padding: 15px; margin-top: 1rem; display: none; }
-        .warning-box strong { color: #fa8c16; }
     </style>
 </head>
 <body>
-    <!-- MODIFICATION: Added data-token and data-tenant-id attributes -->
-    <div class="container" id="dashboard-container" 
-        data-initial-sessions='<%- JSON.stringify(sessions) %>'
-        data-token="<%= token %>" 
-        data-tenant-id="<%= tenant.id %>">
+    <!-- 
+      MODIFICATION: This container is now a static shell.
+      All dynamic data (`welcome message`, `sessions table`, `settings forms`)
+      will be fetched and rendered by dashboard.js.
+    -->
+    <div class="container" id="dashboard-container">
         
-        <h1>Welcome, <%= tenant.name %></h1>
-        <p class="welcome-message">Manage your WhatsApp sessions and settings here. Your account can have a maximum of <strong><%= tenant.maxSessions %></strong> session(s).</p>
+        <h1 id="welcome-header">Loading...</h1>
+        <p class="welcome-message" id="welcome-message"></p>
         
         <div class="section">
             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -77,20 +78,21 @@
                 <div class="form-group">
                     <label for="aiSystemPrompt">AI System Prompt</label>
                     <p style="font-size: 0.9em; color: #667781; margin-top: 0;">Define the core instructions and personality for your AI assistant.</p>
-                    <textarea id="aiSystemPrompt" name="aiSystemPrompt" placeholder="e.g., You are a helpful assistant..."><%= tenant.aiSystemPrompt || '' %></textarea>
+                    <textarea id="aiSystemPrompt" name="aiSystemPrompt" placeholder="e.g., You are a helpful assistant..."></textarea>
                 </div>
                 <button type="submit" class="btn-success">Save Settings</button>
                 <p id="settings-feedback"></p>
             </form>
         </div>
-                <div class="section">
+        
+        <div class="section">
             <h2>Humanization Settings</h2>
             <p style="font-size: 0.9em; color: #667781; margin-top: 0;">These settings control the bot's typing behavior to avoid detection and bans by WhatsApp. It is highly recommended to keep this enabled.</p>
             
             <form id="humanization-form" class="settings-form" onsubmit="saveHumanizationSettings(event)">
                 <div class="form-group">
                     <label style="display: flex; align-items: center; gap: 10px;">
-                        <input type="checkbox" id="enableHumanization" name="enableHumanization" onchange="toggleWarning()" <%- tenant.enableHumanization ? 'checked' : '' %>>
+                        <input type="checkbox" id="enableHumanization" name="enableHumanization" onchange="toggleWarning()">
                         Enable Human-like Typing
                     </label>
                 </div>
@@ -103,15 +105,15 @@
                     <div>
                         <label>Typing Speed (ms)</label>
                         <div class="form-row">
-                            <input type="number" id="minCharDelay" name="minCharDelay" value="<%= tenant.minCharDelay %>" required>
-                            <input type="number" id="maxCharDelay" name="maxCharDelay" value="<%= tenant.maxCharDelay %>" required>
+                            <input type="number" id="minCharDelay" name="minCharDelay" required>
+                            <input type="number" id="maxCharDelay" name="maxCharDelay" required>
                         </div>
                         <small>Min/Max delay between each typed character.</small>
                         
                         <label>Sending Pause (ms)</label>
                         <div class="form-row">
-                            <input type="number" id="minPauseAfterTyping" name="minPauseAfterTyping" value="<%= tenant.minPauseAfterTyping %>" required>
-                            <input type="number" id="maxPauseAfterTyping" name="maxPauseAfterTyping" value="<%= tenant.maxPauseAfterTyping %>" required>
+                            <input type="number" id="minPauseAfterTyping" name="minPauseAfterTyping" required>
+                            <input type="number" id="maxPauseAfterTyping" name="maxPauseAfterTyping" required>
                         </div>
                         <small>Min/Max pause after typing, before sending.</small>
                     </div>
@@ -119,12 +121,12 @@
                     <div>
                         <label>Typo Simulation</label>
                         <div class="form-row">
-                            <input type="number" step="0.01" min="0" max="1" id="errorProbability" name="errorProbability" value="<%= tenant.errorProbability %>" required>
+                            <input type="number" step="0.01" min="0" max="1" id="errorProbability" name="errorProbability" required>
                         </div>
                         <small>Typo chance per character (0.0 to 1.0).</small>
 
                         <div class="form-row">
-                        <input type="number" min="0" id="maxBackspaceChars" name="maxBackspaceChars" value="<%= tenant.maxBackspaceChars %>" required>
+                        <input type="number" min="0" id="maxBackspaceChars" name="maxBackspaceChars" required>
                         </div>
                         <small>Max characters to delete when fixing a typo.</small>
                     </div>
@@ -136,7 +138,6 @@
         </div>
     </div>
     
-    <!-- MODIFICATION: Replaced inline script with a link to the external JS file -->
     <script src="/js/dashboard.js" defer></script>
 </body>
 </html>

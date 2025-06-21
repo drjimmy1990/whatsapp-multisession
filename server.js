@@ -1,3 +1,4 @@
+// CoDev — A GPT 4.0 Virtual Developer, by  twitter.com/@etherlegend 
 // server.js (Definitive Final Version)
 require('dotenv').config();
 
@@ -65,20 +66,16 @@ const protectAdmin = (req, res, next) => {
     res.redirect('/admin/login');
 };
 
+// --- START OF MODIFICATION ---
+// This middleware now ONLY checks the Authorization header.
 const protectUser = (req, res, next) => {
-    let token;
+    const authHeader = req.headers.authorization;
 
-    // Look for the token in the Authorization header first
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
-        token = req.headers.authorization.split(' ')[1];
-    } else {
-        // Fallback to the query parameter for now
-        token = req.query.token;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ status: 'error', message: 'No token provided or malformed header.' });
     }
-
-    if (!token) {
-        return res.status(401).json({ status: 'error', message: 'No token provided.' });
-    }
+    
+    const token = authHeader.split(' ')[1];
 
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
@@ -89,40 +86,59 @@ const protectUser = (req, res, next) => {
         return res.status(401).json({ status: 'error', message: 'Invalid token.' });
     }
 };
-// --- END OF MODIFICATION for protectUser ---
+// --- END OF MODIFICATION ---
 
+// The protectUserView middleware is no longer needed and has been removed.
 
-// --- START OF MODIFICATION for protectUserView ---
-const protectUserView = (req, res, next) => {
-    let token;
-
-    // We only need the query param for the initial page load
-    token = req.query.token;
-
-    if (!token) {
-        return res.redirect('/login');
-    }
-    
-    try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        req.tenant = decoded;
-        next();
-    } catch (ex) {
-        console.error("Invalid token access attempt:", ex.message);
-        res.redirect('/login');
-    }
-};
 async function restoreActiveSessions() { console.log('[SYSTEM] Attempting to restore active sessions...'); try { const activeSessions = await db.getAllActiveSessions(); if (!activeSessions || activeSessions.length === 0) { return console.log('[SYSTEM] No active sessions found in DB to restore.'); } console.log(`[SYSTEM] Found ${activeSessions.length} session(s) to restore.`); for (const session of activeSessions) { SessionManager.startSession(session.id, session.tenantId, true); } } catch (e) { console.error('[SYSTEM] CRITICAL ERROR during session restoration:', e); } }
 
 app.get('/admin/login', (req, res) => res.render('admin_login.html'));
 app.get('/admin', protectAdmin, async (req, res) => { try { const [tenants, sessions] = await Promise.all([db.getAllTenants(), db.getAllSessions()]); res.render('admin.html', { tenants, sessions }); } catch (e) { res.status(500).send("Error loading admin panel data."); } });
 app.get('/user/session/:sessionId', (req, res) => res.render('user_session.ejs', { sessionId: req.params.sessionId }));
 app.get('/login', (req, res) => res.render('login.html'));
-app.get('/user/dashboard', protectUserView, async (req, res) => { const tenantId = req.tenant.tenantId; try { const [sessions, tenantDetails] = await Promise.all([db.getSessionsByTenant(tenantId), db.getTenant(tenantId)]); res.render('user_dashboard.html', { sessions, tenant: tenantDetails, token: req.query.token }); } catch (e) { res.status(500).send("Error loading dashboard."); } });
+
+// --- START OF MODIFICATION ---
+// This route is now unprotected and serves the static shell of the dashboard.
+app.get('/user/dashboard', (req, res) => {
+    res.render('user_dashboard.html', {});
+});
+// --- END OF MODIFICATION ---
+
 
 app.post('/api/admin/login', (req, res) => { const { password } = req.body; if (password === ADMIN_PASSWORD) { req.session.isAdmin = true; req.session.save(err => err ? res.status(500).json({ message: 'Session save error.' }) : res.status(200).json({ message: 'Login successful.' })); } else { res.status(401).json({ message: 'Invalid password.' }); } });
 app.post('/api/admin/logout', (req, res) => { req.session.destroy(err => { if (err) { return res.status(500).json({ message: 'Could not log out.' }); } res.clearCookie('connect.sid'); res.status(200).json({ message: 'Logout successful.' }); }); });
 app.post('/api/login', async (req, res) => { const { username, password } = req.body; if (!username || !password) { return res.status(400).json({ message: 'Username and password are required.' }); } try { const tenant = await db.getTenantByUsername(username); if (!tenant || !tenant.hashedPassword) { return res.status(401).json({ message: 'Invalid credentials or user setup incomplete.' }); } const isMatch = await bcrypt.compare(password, tenant.hashedPassword); if (!isMatch) { return res.status(401).json({ message: 'Invalid credentials.' }); } const token = jwt.sign({ tenantId: tenant.id, name: tenant.name }, JWT_SECRET, { expiresIn: '8h' }); res.status(200).json({ message: 'Login successful', token: token }); } catch (error) { res.status(500).json({ message: 'Server error during login.' }); } });
+
+// --- START OF NEW ENDPOINT ---
+// New protected endpoint for fetching all necessary data for the user dashboard.
+app.get('/api/user/dashboard-data', protectUser, async (req, res) => {
+    const tenantId = req.tenant.tenantId;
+    try {
+        const [sessions, tenantDetails] = await Promise.all([
+            db.getSessionsByTenant(tenantId),
+            db.getTenant(tenantId)
+        ]);
+
+        if (!tenantDetails) {
+            return res.status(404).json({ status: 'error', message: 'Tenant not found.' });
+        }
+        
+        // It's good practice to not send the hashed password to the client.
+        const { hashedPassword, ...safeTenantDetails } = tenantDetails;
+
+        res.status(200).json({
+            status: 'success',
+            data: {
+                sessions: sessions,
+                tenant: safeTenantDetails
+            }
+        });
+    } catch (e) {
+        console.error(`[API] Error fetching dashboard data for tenant ${tenantId}:`, e);
+        res.status(500).json({ status: 'error', message: 'Error loading dashboard data.' });
+    }
+});
+// --- END OF NEW ENDPOINT ---
 
 app.get('/api/dashboard-data', protectAdmin, async (req, res) => { try { const [tenants, sessions] = await Promise.all([db.getAllTenants(), db.getAllSessions()]); res.status(200).json({ tenants, sessions }); } catch (e) { res.status(500).json({ error: "Failed to fetch dashboard data" }); } });
 app.post('/api/tenants', protectAdmin, async (req, res) => { const { tenantId, name, username, password, webhookUrl, maxSessions } = req.body; if (!tenantId || !name || !username || !password) { return res.status(400).json({ status: 'error', message: 'Tenant ID, Name, Username, and Password are required.' }); } try { await createTenantWithPassword(tenantId, name, username, password, webhookUrl || '', maxSessions || 1); res.status(201).json({ status: 'success', message: 'Tenant created successfully.' }); } catch (e) { if (e.code === 'SQLITE_CONSTRAINT') { return res.status(409).json({ status: 'error', message: `Tenant ID or Username already exists.` }); } res.status(500).json({ status: 'error', message: 'Failed to create tenant.' }); } });
@@ -147,15 +163,12 @@ app.put('/api/tenants/:tenantId/password', protectAdmin, async (req, res) => {
         res.status(500).json({ status: 'error', message: 'Failed to update tenant password.' });
     }
 });
-// --- START OF DEFINITIVE FIX FOR POST /SESSIONS ---
+
 app.post('/sessions', async (req, res) => {
     let tenantId;
     let isUserRequest = false;
 
-    // A user authenticates with a JWT in the Authorization header.
-    // An admin authenticates with an express-session cookie.
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
-        // This is a USER request.
         try {
             const token = req.headers.authorization.split(' ')[1];
             const decoded = jwt.verify(token, JWT_SECRET);
@@ -165,11 +178,9 @@ app.post('/sessions', async (req, res) => {
             return res.status(401).json({ status: 'error', message: 'Invalid token.' });
         }
     } else if (req.session.isAdmin) {
-        // This is an ADMIN request.
         tenantId = req.body.tenantId;
         isUserRequest = false;
     } else {
-        // No valid authentication method was provided.
         return res.status(403).json({ status: 'error', message: 'Forbidden. No authentication provided.' });
     }
 
@@ -183,7 +194,6 @@ app.post('/sessions', async (req, res) => {
             return res.status(404).json({ status: 'error', message: 'Tenant not found.' });
         }
 
-        // Session limit check is ONLY applied if it's a user request.
         if (isUserRequest) {
             const activeSessions = await db.getActiveSessionsForTenant(tenantId);
             if (activeSessions.length >= tenant.maxSessions) {
@@ -210,7 +220,6 @@ app.post('/sessions', async (req, res) => {
         res.status(500).json({ status: 'error', message: 'An internal error occurred.' });
     }
 });
-// --- END OF DEFINITIVE FIX FOR POST /SESSIONS ---
 app.post('/sessions/:sessionId/send', async (req, res) => { 
     const { sessionId } = req.params; 
     const { chatId, text } = req.body; 
@@ -246,7 +255,6 @@ app.put('/user/settings/ai', protectUser, async (req, res) => {
     }
 });
 
-// Route for updating Humanization settings
 app.put('/user/settings/humanization', protectUser, async (req, res) => {
     const tenantId = req.tenant.tenantId;
     const { 
@@ -254,19 +262,16 @@ app.put('/user/settings/humanization', protectUser, async (req, res) => {
         errorProbability, maxBackspaceChars, minPauseAfterTyping, maxPauseAfterTyping 
     } = req.body;
     
-    // --- FIX: Convert to numbers BEFORE validation ---
     const numMinCharDelay = parseInt(minCharDelay, 10);
     const numMaxCharDelay = parseInt(maxCharDelay, 10);
     const numMinPauseAfterTyping = parseInt(minPauseAfterTyping, 10);
     const numMaxPauseAfterTyping = parseInt(maxPauseAfterTyping, 10);
 
-    // Now, validate using the numbers
     if (numMinCharDelay > numMaxCharDelay || numMinPauseAfterTyping > numMaxPauseAfterTyping) {
         return res.status(400).json({ status: 'error', message: 'Min values cannot be greater than max values.' });
     }
 
     try {
-        // We can now use the numeric variables we already created
         const settingsToUpdate = {
             enableHumanization: !!enableHumanization,
             minCharDelay: numMinCharDelay,
