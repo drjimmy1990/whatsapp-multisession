@@ -79,12 +79,6 @@ class SessionManager {
         }
     }
 
-    // --- START OF NEW METHODS ---
-
-    /**
-     * Sends a text message with human-like typing simulation.
-     * Fetches tenant-specific humanization settings.
-     */
     async sendHumanizedMessage(sessionId, chatId, text) {
         const bot = this.sessions.get(sessionId);
         if (!bot || !bot.isReady) {
@@ -95,8 +89,6 @@ class SessionManager {
         try {
             const session = await db.getSession(sessionId);
             const tenant = await db.getTenant(session.tenantId);
-
-            // Construct a humanize config, falling back to defaults for any undefined tenant setting
             const humanizeConfig = {
                 enabled: tenant.enableHumanization ?? defaultConfig.humanize.enabled,
                 minCharDelay: tenant.minCharDelay ?? defaultConfig.humanize.minCharDelay,
@@ -107,11 +99,9 @@ class SessionManager {
                 maxPauseAfterTyping: tenant.maxPauseAfterTyping ?? defaultConfig.humanize.maxPauseAfterTyping,
             };
 
-            // Only use humanization if it's enabled for the tenant
             if (humanizeConfig.enabled) {
                 return await bot.sendHumanizedMessage(chatId, text, humanizeConfig);
             } else {
-                // If not enabled, send the message instantly
                 return await bot.sendMessage(chatId, text);
             }
         } catch (e) {
@@ -120,52 +110,20 @@ class SessionManager {
         }
     }
 
-    /**
-     * Sends media from a URL. This does not use humanization for instant delivery.
-     */
     async sendUrlMedia(sessionId, chatId, mediaUrl, caption) {
         const bot = this.sessions.get(sessionId);
         if (!bot || !bot.isReady) {
             console.error(`[Manager] Session ${sessionId} not ready or not found for sending media.`);
             return false;
         }
-        // Delegate the core logic to the WhatsAppWrapper instance
         return bot.sendUrlMedia(chatId, mediaUrl, { caption });
     }
+
     async terminateSession(sessionId) {
         const bot = this.sessions.get(sessionId);
         if (bot && bot instanceof WhatsAppWrapper) {
-            await bot.logout(); // This also deletes the session folder
+            await bot.logout(); 
         } else {
-            // If the session is not in the active map (e.g., it's in an ERROR state),
-            // we still need to ensure its session folder is cleaned up.
-            console.log(`[Manager] Session ${sessionId} not in active map. Attempting manual cleanup.`);
-            const wrapper = new WhatsAppWrapper({ session: { clientId: sessionId } });
-            await wrapper.logout();
-        }
-
-        // Clean up internal state and database record
-        const session = await db.getSession(sessionId);
-        if (session) {
-            this.initializingTenants.delete(session.tenantId);
-        }
-        this.sessions.delete(sessionId);
-        await db.deleteSession(sessionId); // This will cascade and delete the session from the DB
-        console.log(`[Manager] Session ${sessionId} has been terminated and removed.`);
-    }
-
-    /**
-     * Finds all sessions belonging to a tenant and terminates them one by one.
-     * This is used when an admin deletes a tenant.
-     * @param {string} tenantId The ID of the tenant to clear.
-     */
-    async terminateSession(sessionId) {
-        const bot = this.sessions.get(sessionId);
-        if (bot && bot instanceof WhatsAppWrapper) {
-            await bot.logout(); // This also deletes the session folder
-        } else {
-            // If the session is not in the active map (e.g., it's in an ERROR state),
-            // we still need to ensure its session folder is cleaned up.
             console.log(`[Manager] Session ${sessionId} not in active map. Attempting manual cleanup.`);
             const wrapper = new WhatsAppWrapper({ session: { clientId: sessionId } });
             await wrapper.logout();
@@ -179,7 +137,29 @@ class SessionManager {
         await db.deleteSession(sessionId); 
         console.log(`[Manager] Session ${sessionId} has been terminated and removed.`);
     }
-    
+
+    // --- START OF FIX ---
+    /**
+     * Finds all sessions belonging to a tenant and terminates them one by one.
+     * This is used when an admin deletes a tenant.
+     * @param {string} tenantId The ID of the tenant to clear.
+     */
+    async terminateTenantSessions(tenantId) {
+        console.log(`[Manager] Terminating all sessions for tenant: ${tenantId}`);
+        const sessionsToDelete = await db.getSessionsByTenant(tenantId);
+
+        if (!sessionsToDelete || sessionsToDelete.length === 0) {
+            console.log(`[Manager] No sessions found for tenant ${tenantId} to terminate.`);
+            return;
+        }
+
+        console.log(`[Manager] Found ${sessionsToDelete.length} sessions to terminate for tenant ${tenantId}.`);
+        const terminationPromises = sessionsToDelete.map(session => this.terminateSession(session.id));
+        await Promise.all(terminationPromises);
+        console.log(`[Manager] Successfully terminated all sessions for tenant: ${tenantId}`);
+    }
+    // --- END OF FIX ---
+    // NOTE: The duplicated `terminateSession` function that was here has been removed.
 
     async shutdown() {
         console.log('[Manager] Shutting down all sessions...');
